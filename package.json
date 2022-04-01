@@ -1,6 +1,6 @@
 {
   "name": "nexteditor-sharedb-server",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "main": "./dist/index.js",
   "scripts": {
@@ -14,8 +14,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@nexteditorjs/nexteditor-core": "^0.0.28",
-    "@nexteditorjs/nexteditor-sharedb": "^0.0.28",
+    "@nexteditorjs/nexteditor-core": "^0.0.30",
+    "@nexteditorjs/nexteditor-sharedb": "^0.0.30",
     "@teamwork/websocket-json-stream": "^2.0.0",
     "@types/lokijs": "^1.5.7",
     "express": "^4.17.3",
