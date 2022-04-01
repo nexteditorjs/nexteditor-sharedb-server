@@ -3,10 +3,14 @@ import WebSocket from 'ws';
 import ShareDB from 'sharedb';
 import WebSocketJSONStream from '@teamwork/websocket-json-stream';
 import http from 'http';
+import { genId, getLogger } from '@nexteditorjs/nexteditor-core/dist/common';
 import richText from '@nexteditorjs/nexteditor-core/dist/ot-types/rich-text';
 import { NextEditorCustomMessage, NextEditorJoinMessage, NextEditorUser, NextEditorWelcomeMessage } from '@nexteditorjs/nexteditor-sharedb/dist/messages';
 import * as json1 from 'ot-json1';
-import { genId } from '@nexteditorjs/nexteditor-core/dist/common';
+import path from 'path';
+import LokiDb from './db/loki-db';
+
+const console = getLogger('main');
 
 json1.type.registerSubtype(richText.type);
 json1.type.name = 'ot-json1';
@@ -99,7 +103,13 @@ async function sendWelcomeMessage(stream: WebSocketJSONStream, presenceChannel: 
   });
 }
 
-const backend = new ShareDB({ presence: true, doNotForwardSendPresenceErrorsToClient: true });
+const dbPath = path.join(__dirname, '../data');
+
+const backend = new ShareDB({
+  db: new LokiDb(dbPath),
+  presence: true,
+  doNotForwardSendPresenceErrorsToClient: true,
+});
 
 webSocketServer.on('connection', async (webSocket, req) => {
   const stream = new WebSocketJSONStream(webSocket);
