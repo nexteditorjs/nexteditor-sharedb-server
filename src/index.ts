@@ -8,6 +8,7 @@ import richText from '@nexteditorjs/nexteditor-core/dist/ot-types/rich-text';
 import { NextEditorCustomMessage, NextEditorJoinMessage, NextEditorUser, NextEditorWelcomeMessage } from '@nexteditorjs/nexteditor-sharedb/dist/messages';
 import * as json1 from 'ot-json1';
 import path from 'path';
+import assert from 'assert';
 import LokiDb from './db/loki-db';
 
 const console = getLogger('main');
@@ -67,13 +68,14 @@ class OnlineUsers {
 
 const onlineUsers = new OnlineUsers();
 
-function getRandomUser() {
-  return users[Date.now() % users.length];
+function getRandomUser(token: string) {
+  const n = [...token].reduce((p, c) => p + c.charCodeAt(0), 0);
+  return users[n % users.length];
 }
 
-async function sendInitMessage(stream: WebSocketJSONStream) {
+async function sendInitMessage(stream: WebSocketJSONStream, token: string) {
   const user: NextEditorUser = {
-    ...getRandomUser(),
+    ...getRandomUser(token),
     clientId: genId(),
   };
   const message: NextEditorCustomMessage = {
@@ -112,9 +114,11 @@ const backend = new ShareDB({
 });
 
 webSocketServer.on('connection', async (webSocket, req) => {
+  const token = req.headers['sec-websocket-protocol'] as string ?? '';
+  // verify token
   const stream = new WebSocketJSONStream(webSocket);
   try {
-    await sendInitMessage(stream);
+    await sendInitMessage(stream, token);
     backend.listen(stream, req);
   } catch (err) {
     webSocket.close();
@@ -126,16 +130,25 @@ backend.use('receivePresence', (context, next) => {
   const data = context.presence.p;
   if (data === null) {
     const message = context.agent.custom as NextEditorJoinMessage;
-    console.debug(`${message.user.name} leave`);
+    console.debug(`${message.user.name} [${message.user.clientId}] leave`);
     onlineUsers.removeUser(context.presence.ch, message.user.clientId);
   } else if (data.nexteditor === 'join') {
     //
-    context.agent.custom = data;
     const message = data as NextEditorJoinMessage;
-    console.debug(`${message.user.name} join`);
-    onlineUsers.addUser(context.presence.ch, message.user);
     //
-    sendWelcomeMessage(context.agent.stream as WebSocketJSONStream, context.presence.ch);
+    const old = context.agent.custom as NextEditorJoinMessage;
+    if (old && old.user) {
+      if (old.user.clientId === message.user.clientId) {
+        console.debug(`resent join message, ${message.user.name} ${message.user.clientId} to new client`);
+      } else {
+        console.error(`invalid resent join message, from ${old.user.name} ${old.user.clientId} to ${message.user.name} ${message.user.clientId}`);
+      }
+    } else {
+      console.debug(`${message.user.name} [${message.user.clientId}] join`);
+      context.agent.custom = data;
+      onlineUsers.addUser(context.presence.ch, message.user);
+      sendWelcomeMessage(context.agent.stream as WebSocketJSONStream, context.presence.ch);
+    }
   }
   next();
 });

@@ -11,26 +11,22 @@ class LokiDoc {
 
   private constructor(
     public dbPath: string,
-    private collection: string,
-    private id: string,
+    public collection: string,
+    public id: string,
     autoloadCallback: (err?: Error) => void,
   ) {
-    this.db = new Loki(
-      dbPath,
-      {
-        autoload: true,
-        autoloadCallback,
-        autosave: true,
-        autosaveInterval: 100,
-      },
-    );
+    this.db = new Loki(dbPath, {
+      autoload: true,
+      autoloadCallback,
+      autosave: true,
+      autosaveInterval: 100,
+    });
   }
 
-  private async init() {
+  private init() {
     const createCollection = (colName: string) => {
       if (this.db.getCollection(colName) == null) this.db.addCollection(colName);
     };
-
     createCollection('ops');
     createCollection('snapshots');
   }
@@ -48,23 +44,23 @@ class LokiDoc {
     });
     //
     const db = await promise;
-    await db.init();
+    db.init();
     return db;
   }
 
-  getOpsCollection() {
+  private getOpsCollection() {
     if (this.opsCollection) return this.opsCollection;
     this.opsCollection = this.db.getCollection('ops');
     return this.opsCollection;
   }
 
-  getSnapshotsCollection() {
+  private getSnapshotsCollection() {
     if (this.snapshotsCollection) return this.snapshotsCollection;
     this.snapshotsCollection = this.db.getCollection('snapshots');
     return this.snapshotsCollection;
   }
 
-  commit(op: any, snapshot: any, options: any): boolean {
+  commit(op: any, snapshot: Snapshot, options: any): boolean {
     const collection = this.collection;
     const id = this.id;
     const version = this._getOpVer();
@@ -158,7 +154,7 @@ class LokiDoc {
     });
   }
 
-  _getOpVer(): number {
+  private _getOpVer(): number {
     const collection = this.collection;
     const id = this.id;
     const rows = this.getOpsCollection().find({ $and: [{ collection }, { id }] });
