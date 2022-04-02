@@ -3,7 +3,7 @@ import WebSocket from 'ws';
 import ShareDB from 'sharedb';
 import WebSocketJSONStream from '@teamwork/websocket-json-stream';
 import http from 'http';
-import { getLogger } from '@nexteditorjs/nexteditor-core/dist/common';
+import { genId, getLogger } from '@nexteditorjs/nexteditor-core/dist/common';
 import richText from '@nexteditorjs/nexteditor-core/dist/ot-types/rich-text';
 import { NextEditorCustomMessage, NextEditorJoinMessage, NextEditorUser, NextEditorWelcomeMessage } from '@nexteditorjs/nexteditor-sharedb/dist/messages';
 import * as json1 from 'ot-json1';
@@ -20,26 +20,55 @@ const app = express();
 const server = http.createServer(app);
 const webSocketServer = new WebSocket.Server({ server });
 
-const users = [
-  {
-    userId: 'user-1',
-    name: 'Bruce',
-    avatarUrl: '',
-    rainbowIndex: 0,
-  },
-  {
-    userId: 'user-2',
-    name: 'Steve',
-    avatarUrl: '',
-    rainbowIndex: 1,
-  },
-  {
-    userId: 'user-3',
-    name: 'James',
-    avatarUrl: '',
-    rainbowIndex: 2,
-  },
+const names = [
+  'James',
+  'Robert',
+  'John',
+  'Michael',
+  'William',
+  'David',
+  'Richard',
+  'Joseph',
+  'Thomas',
+  'Charles',
+  'Christopher',
+  'Daniel',
+  'Matthew',
+  'Anthony',
+  'Mark',
+  'Donald',
+  'Steven',
+  'Paul',
+  'Andrew',
+  'Joshua',
+  'Mary',
+  'Patricia',
+  'Jennifer',
+  'Linda',
+  'Elizabeth',
+  'Barbara',
+  'Susan',
+  'Jessica',
+  'Sarah',
+  'Karen',
+  'Nancy',
+  'Lisa',
+  'Betty',
+  'Margaret',
+  'Sandra',
+  'Ashley',
+  'Kimberly',
+  'Emily',
+  'Donna',
+  'Michelle',
 ];
+
+const users = names.map((name, index) => ({
+  userId: genId(),
+  name,
+  avatarUrl: `https://picsum.photos/seed/${name.toLocaleLowerCase()}/72/72`,
+  rainbowIndex: index,
+}));
 
 class OnlineUsers {
   private users = new Map<string, Map<string, NextEditorUser> >();
