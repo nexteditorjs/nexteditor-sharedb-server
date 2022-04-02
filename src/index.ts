@@ -8,7 +8,6 @@ import richText from '@nexteditorjs/nexteditor-core/dist/ot-types/rich-text';
 import { NextEditorCustomMessage, NextEditorJoinMessage, NextEditorUser, NextEditorWelcomeMessage } from '@nexteditorjs/nexteditor-sharedb/dist/messages';
 import * as json1 from 'ot-json1';
 import path from 'path';
-import assert from 'assert';
 import LokiDb from './db/loki-db';
 
 const console = getLogger('main');
@@ -144,6 +143,9 @@ backend.use('receivePresence', (context, next) => {
         console.error(`invalid resent join message, from ${old.user.name} ${old.user.clientId} to ${message.user.name} ${message.user.clientId}`);
       }
     } else {
+      if (!message.user) {
+        console.error('invalid message');
+      }
       console.debug(`${message.user.name} [${message.user.clientId}] join`);
       context.agent.custom = data;
       onlineUsers.addUser(context.presence.ch, message.user);
