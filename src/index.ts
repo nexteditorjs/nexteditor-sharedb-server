@@ -183,8 +183,11 @@ backend.use('receivePresence', (context, next) => {
   const data = context.presence.p;
   if (data === null) {
     const message = context.agent.custom as NextEditorJoinMessage;
-    console.debug(`${message.user.name} [${message.user.clientId}] leave`);
-    onlineUsers.removeUser(context.presence.ch, message.user.clientId);
+    if (message && message.user) {
+      console.debug(`${message.user.name} [${message.user.clientId}] leave`);
+      onlineUsers.removeUser(context.presence.ch, message.user.clientId);
+    }
+    //
   } else if (data.nexteditor === 'join') {
     //
     const message = data as NextEditorJoinMessage;
