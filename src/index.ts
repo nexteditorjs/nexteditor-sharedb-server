@@ -3,7 +3,7 @@ import WebSocket from 'ws';
 import ShareDB from 'sharedb';
 import WebSocketJSONStream from '@teamwork/websocket-json-stream';
 import http from 'http';
-import { genId, getLogger } from '@nexteditorjs/nexteditor-core/dist/common';
+import { getLogger } from '@nexteditorjs/nexteditor-core/dist/common';
 import richText from '@nexteditorjs/nexteditor-core/dist/ot-types/rich-text';
 import { NextEditorCustomMessage, NextEditorJoinMessage, NextEditorUser, NextEditorWelcomeMessage } from '@nexteditorjs/nexteditor-sharedb/dist/messages';
 import * as json1 from 'ot-json1';
@@ -25,16 +25,19 @@ const users = [
     userId: 'user-1',
     name: 'Bruce',
     avatarUrl: '',
+    rainbowIndex: 0,
   },
   {
     userId: 'user-2',
     name: 'Steve',
     avatarUrl: '',
+    rainbowIndex: 1,
   },
   {
     userId: 'user-3',
     name: 'James',
     avatarUrl: '',
+    rainbowIndex: 2,
   },
 ];
 
@@ -72,10 +75,10 @@ function getRandomUser(token: string) {
   return users[n % users.length];
 }
 
-async function sendInitMessage(stream: WebSocketJSONStream, token: string) {
+async function sendInitMessage(stream: WebSocketJSONStream, token: string, clientId: string) {
   const user: NextEditorUser = {
     ...getRandomUser(token),
-    clientId: genId(),
+    clientId,
   };
   const message: NextEditorCustomMessage = {
     nexteditor: 'init',
@@ -113,13 +116,35 @@ const backend = new ShareDB({
 });
 
 webSocketServer.on('connection', async (webSocket, req) => {
-  const token = req.headers['sec-websocket-protocol'] as string ?? '';
+  //
+  const parseProtocol = () => {
+    const protocol = req.headers['sec-websocket-protocol'];
+    if (typeof protocol !== 'string') {
+      throw new Error(`invalid protocol, ${JSON.stringify(protocol)}`);
+    }
+    let json;
+    try {
+      const jsonText = Buffer.from(protocol, 'base64').toString('utf8');
+      json = JSON.parse(jsonText);
+    } catch (err) {
+      throw new Error(`invalid protocol, failed to parse, ${(err as Error).message}, ${JSON.stringify(protocol)}`);
+    }
+    //
+    if (!json.token || !json.clientId || typeof json.token !== 'string' || typeof json.clientId !== 'string') {
+      throw new Error(`invalid protocol, no token or clientId. ${JSON.stringify(protocol)}`);
+    }
+    //
+    return [json.token as string, json.clientId as string];
+  };
+  //
   // verify token
   const stream = new WebSocketJSONStream(webSocket);
   try {
-    await sendInitMessage(stream, token);
+    const [token, clientId] = parseProtocol();
+    await sendInitMessage(stream, token, clientId);
     backend.listen(stream, req);
   } catch (err) {
+    console.error(`failed to create connection, ${(err as Error).message}`);
     webSocket.close();
   }
 });
