@@ -1,142 +1,24 @@
+import './config';
 import express from 'express';
 import WebSocket from 'ws';
-import ShareDB from 'sharedb';
-import WebSocketJSONStream from '@teamwork/websocket-json-stream';
 import http from 'http';
-import { genId, getLogger } from '@nexteditorjs/nexteditor-core/dist/common';
+import { getLogger } from '@nexteditorjs/nexteditor-core/dist/common';
+import yargs from 'yargs';
+import ShareDB from 'sharedb';
 import richText from '@nexteditorjs/nexteditor-core/dist/ot-types/rich-text';
-import { NextEditorCustomMessage, NextEditorJoinMessage, NextEditorUser, NextEditorWelcomeMessage } from '@nexteditorjs/nexteditor-sharedb/dist/messages';
 import * as json1 from 'ot-json1';
-import path from 'path';
+import fakeRouter from './fake/fake-token';
 import LokiDb from './db/loki-db';
+import { dbPath } from './config/db-path';
+import { addActions } from './actions';
+import { initWebSocket } from './websocket';
 
-const console = getLogger('main');
+const logger = getLogger('main');
+const argv = yargs(process.argv.slice(2)).parse();
 
 json1.type.registerSubtype(richText.type);
 json1.type.name = 'ot-json1';
 ShareDB.types.register(json1.type);
-
-const app = express();
-const server = http.createServer(app);
-const webSocketServer = new WebSocket.Server({ server });
-
-const names = [
-  'James',
-  'Robert',
-  'John',
-  'Michael',
-  'William',
-  'David',
-  'Richard',
-  'Joseph',
-  'Thomas',
-  'Charles',
-  'Christopher',
-  'Daniel',
-  'Matthew',
-  'Anthony',
-  'Mark',
-  'Donald',
-  'Steven',
-  'Paul',
-  'Andrew',
-  'Joshua',
-  'Mary',
-  'Patricia',
-  'Jennifer',
-  'Linda',
-  'Elizabeth',
-  'Barbara',
-  'Susan',
-  'Jessica',
-  'Sarah',
-  'Karen',
-  'Nancy',
-  'Lisa',
-  'Betty',
-  'Margaret',
-  'Sandra',
-  'Ashley',
-  'Kimberly',
-  'Emily',
-  'Donna',
-  'Michelle',
-];
-
-const users = names.map((name, index) => ({
-  userId: genId(),
-  name,
-  avatarUrl: `https://picsum.photos/seed/${name.toLocaleLowerCase()}/72/72`,
-  rainbowIndex: index,
-}));
-
-class OnlineUsers {
-  private users = new Map<string, Map<string, NextEditorUser> >();
-
-  addUser(presenceChannel: string, user: NextEditorUser) {
-    const users = this.users.get(presenceChannel);
-    if (users) {
-      users.set(user.clientId, user);
-    } else {
-      const newUsers = new Map<string, NextEditorUser>();
-      newUsers.set(user.clientId, user);
-      this.users.set(presenceChannel, newUsers);
-    }
-  }
-
-  removeUser(presenceChannel: string, clientId: string) {
-    const users = this.users.get(presenceChannel);
-    if (!users) return;
-    users.delete(clientId);
-  }
-
-  getOnlineUsers(presenceChannel: string) {
-    const users = this.users.get(presenceChannel);
-    if (!users) return [];
-    return Array.from(users.values());
-  }
-}
-
-const onlineUsers = new OnlineUsers();
-
-function getRandomUser(token: string) {
-  const n = [...token].reduce((p, c) => p + c.charCodeAt(0), 0);
-  return users[n % users.length];
-}
-
-async function sendInitMessage(stream: WebSocketJSONStream, token: string, clientId: string) {
-  const user: NextEditorUser = {
-    ...getRandomUser(token),
-    clientId,
-  };
-  const message: NextEditorCustomMessage = {
-    nexteditor: 'init',
-    user,
-  };
-  // eslint-disable-next-line no-param-reassign
-  return new Promise<void>((resolve, reject) => {
-    stream.ws.send(JSON.stringify(message), (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-}
-
-async function sendWelcomeMessage(stream: WebSocketJSONStream, presenceChannel: string) {
-  const message: NextEditorWelcomeMessage = {
-    nexteditor: 'welcome',
-    onlineUsers: onlineUsers.getOnlineUsers(presenceChannel),
-  };
-  // eslint-disable-next-line no-param-reassign
-  return new Promise<void>((resolve, reject) => {
-    stream.ws.send(JSON.stringify(message), (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-}
-
-const dbPath = path.join(__dirname, '../data');
 
 const backend = new ShareDB({
   db: new LokiDb(dbPath),
@@ -144,72 +26,19 @@ const backend = new ShareDB({
   doNotForwardSendPresenceErrorsToClient: true,
 });
 
-webSocketServer.on('connection', async (webSocket, req) => {
-  //
-  const parseProtocol = () => {
-    const protocol = req.headers['sec-websocket-protocol'];
-    if (typeof protocol !== 'string') {
-      throw new Error(`invalid protocol, ${JSON.stringify(protocol)}`);
-    }
-    let json;
-    try {
-      const jsonText = Buffer.from(protocol, 'base64').toString('utf8');
-      json = JSON.parse(jsonText);
-    } catch (err) {
-      throw new Error(`invalid protocol, failed to parse, ${(err as Error).message}, ${JSON.stringify(protocol)}`);
-    }
-    //
-    if (!json.token || !json.clientId || typeof json.token !== 'string' || typeof json.clientId !== 'string') {
-      throw new Error(`invalid protocol, no token or clientId. ${JSON.stringify(protocol)}`);
-    }
-    //
-    return [json.token as string, json.clientId as string];
-  };
-  //
-  // verify token
-  const stream = new WebSocketJSONStream(webSocket);
-  try {
-    const [token, clientId] = parseProtocol();
-    await sendInitMessage(stream, token, clientId);
-    backend.listen(stream, req);
-  } catch (err) {
-    console.error(`failed to create connection, ${(err as Error).message}`);
-    webSocket.close();
-  }
-});
+addActions(backend);
 
-backend.use('receivePresence', (context, next) => {
-  // Do something with the context
-  const data = context.presence.p;
-  if (data === null) {
-    const message = context.agent.custom as NextEditorJoinMessage;
-    if (message && message.user) {
-      console.debug(`${message.user.name} [${message.user.clientId}] leave`);
-      onlineUsers.removeUser(context.presence.ch, message.user.clientId);
-    }
-    //
-  } else if (data.nexteditor === 'join') {
-    //
-    const message = data as NextEditorJoinMessage;
-    //
-    const old = context.agent.custom as NextEditorJoinMessage;
-    if (old && old.user) {
-      if (old.user.clientId === message.user.clientId) {
-        console.debug(`resent join message, ${message.user.name} ${message.user.clientId} to new client`);
-      } else {
-        console.error(`invalid resent join message, from ${old.user.name} ${old.user.clientId} to ${message.user.name} ${message.user.clientId}`);
-      }
-    } else {
-      if (!message.user) {
-        console.error('invalid message');
-      }
-      console.debug(`${message.user.name} [${message.user.clientId}] join`);
-      context.agent.custom = data;
-      onlineUsers.addUser(context.presence.ch, message.user);
-      sendWelcomeMessage(context.agent.stream as WebSocketJSONStream, context.presence.ch);
-    }
-  }
-  next();
-});
+const app = express();
+const server = http.createServer(app);
+const webSocketServer = new WebSocket.Server({ server });
 
+if (argv.enableFakeToken) {
+  logger.warn('Fake token is enabled');
+  app.use('/fake', fakeRouter);
+}
+
+// init websocket
+initWebSocket(webSocketServer, backend);
+
+// start server
 server.listen(8080);
